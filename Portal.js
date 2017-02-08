@@ -2,8 +2,18 @@ let db = console.log;
 
 function TilePortal() {
     this.__proto__ = new Engine(undefined, "v");
-    this.Portal1 = {"type": "o", "index": undefined, "value": undefined};
-    this.Portal2 = {"type": "O", "index": undefined, "value": undefined};
+    this.Portal1 = {
+        "type": "o",
+        "index": undefined,
+        "onCell": undefined,
+        "facing": undefined,
+    };
+    this.Portal2 = {
+        "type": "O",
+        "index": undefined,
+        "onCell": undefined,
+        "facing": undefined,
+    };
     this.parseLevelFile = function*(levelFile) {
         let fileLines = levelFile.target.result.split("\n");
         Structure = [];
@@ -65,26 +75,24 @@ function TilePortal() {
             this.__replaceObject("@");
         }
     };
-    */ 
     this.__replaceMap = function(moveTo, cellTo) {
         this.Inventory.map[moveTo] = cellTo;
         this.replaceImage(moveTo, cellTo);
     };
+    */ 
     this.shootPortal = function(Portal) {
-        let Movement = {
-            "^": [-1, 0],
-            "v": [1, 0],
-            "<": [0, -1],
-            ">": [0, 1],
-        }[this.Environment.facing];
+        let toMovement = {"^": [-1,0], "v": [1,0], "<": [0,-1], ">": [0,1]};
+        let Movement = toMovement[this.Environment.facing];
+        let toReverse = {"^": "v", "v": "^", "<": ">", ">": "<"};
         let targetIndex = [
             this.Environment.player[0] + Movement[0],
             this.Environment.player[1] + Movement[1]
         ];
         while (this.Environment.cell.hasOwnProperty(targetIndex)) {
-            if (this.Environment.cell[targetIndex] == "#") {
+            if (this.Environment.cell[targetIndex] === "#") {
+                let portalFacing = toReverse[this.Environment.facing];
                 this.removePortal(Portal);
-                this.placePortal(Portal, targetIndex);
+                this.placePortal(Portal, targetIndex, portalFacing);
                 break;
             }
             targetIndex = [
@@ -93,16 +101,28 @@ function TilePortal() {
             ];
         }
     }
+    this.placePortal = function(Portal, portalIndex, Facing) {
+        Portal.index = portalIndex;
+        Portal.value = this.Environment.cell[portalIndex];
+        Portal.facing = Facing;
+        this.replaceCell(portalIndex, Portal.type);
+    };
     this.removePortal = function(Portal) {
         if (Portal.index) {
             this.replaceCell(Portal.index, Portal.value);
         }
     };
-    this.placePortal = function(Portal, portalIndex) {
-        Portal.index = portalIndex;
-        Portal.value = this.Environment.cell[portalIndex];
-        this.replaceCell(portalIndex, Portal.type);
-    }
+    this.portalTransit = function(moveTo, cellTo) {
+        let Environment = this.Environment;
+        let Portal = cellTo === "o" ? this.Portal2 : this.Portal1;
+        let toMovement = {"^": [-1,0], "v": [1,0], "<": [0,-1], ">": [0,1]};
+        let Movement = toMovement[Portal.facing];
+        let Exit = [
+            Portal.index[0] + Movement[0],
+            Portal.index[1] + Movement[1]
+        ];
+        this.movePlayer(Exit, cellTo, Movement);
+    };
     this.__constructTiles = function() {
         let getImg = document.getElementById.bind(document);
         Tile = {
@@ -113,8 +133,8 @@ function TilePortal() {
             "v": {"image": getImg("Down"), "action": undefined},
             "<": {"image": getImg("Left"), "action": undefined},
             ">": {"image": getImg("Right"), "action": undefined},
-            "o": {"image": getImg("Portal1"), "action": undefined},
-            "O": {"image": getImg("Portal2"), "action": undefined},
+            "o": {"image": getImg("Portal1"), "action": this.portalTransit},
+            "O": {"image": getImg("Portal2"), "action": this.portalTransit},
         };
         return Tile;
     };
