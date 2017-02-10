@@ -80,6 +80,11 @@ function TilePortal() {
         this.replaceImage(moveTo, cellTo);
     };
     */ 
+    this.changeFacing = function(_, _, Movement) {
+        let toDirection  = {"-1,0": "^", "1,0": "v", "0,-1": "<", "0,1": ">"};
+        this.replaceImage(this.Environment.player, toDirection[Movement]);
+        this.Environment.facing = toDirection[Movement];
+    };
     this.shootPortal = function(Portal) {
         let toMovement = {"^": [-1,0], "v": [1,0], "<": [0,-1], ">": [0,1]};
         let Movement = toMovement[this.Environment.facing];
@@ -89,10 +94,18 @@ function TilePortal() {
             this.Environment.player[1] + Movement[1]
         ];
         while (this.Environment.cell.hasOwnProperty(targetIndex)) {
-            if (this.Environment.cell[targetIndex] === "#") {
+            if (this.Environment.cell[targetIndex] === "#" ||
+                this.Environment.cell[targetIndex] === Portal.type)
+            {
                 let portalFacing = toReverse[this.Environment.facing];
                 this.removePortal(Portal);
                 this.placePortal(Portal, targetIndex, portalFacing);
+                break;
+            }
+            // Breakoff search if the other portal.
+            else if (this.Environment.cell[targetIndex] === "o" ||
+                     this.Environment.cell[targetIndex] === "O")
+            {
                 break;
             }
             targetIndex = [
@@ -121,13 +134,16 @@ function TilePortal() {
             Portal.index[0] + Movement[0],
             Portal.index[1] + Movement[1]
         ];
-        this.movePlayer(Exit, cellTo, Movement);
+        if (Environment.cell[Exit] === " ") {
+            this.movePlayer(Exit, cellTo, Movement);
+        }
     };
     this.__constructTiles = function() {
         let getImg = document.getElementById.bind(document);
         Tile = {
             " ": {"image": getImg("Empty"), "action": this.movePlayer},
-            "#": {"image": getImg("Wall"), "action": undefined},
+            "@": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "#": {"image": getImg("Wall"), "action": this.changeFacing},
             "$": {"image": getImg("Down"), "action": undefined},
             "^": {"image": getImg("Up"), "action": undefined},
             "v": {"image": getImg("Down"), "action": undefined},
