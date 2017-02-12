@@ -2,17 +2,67 @@ let db = console.log;
 
 function TilePortal() {
     this.__proto__ = new Engine(undefined, "v");
+    this.playerFacing = "v";
     this.Portal1 = {
         "type": "o",
         "index": undefined,
-        "onCell": undefined,
         "facing": undefined,
     };
     this.Portal2 = {
         "type": "O",
         "index": undefined,
-        "onCell": undefined,
         "facing": undefined,
+    };
+    this.keyInput = {
+        "movementKeys": {
+            "38": new IndexObj(-1, 0), // Up Arrow
+            "40": new IndexObj(1, 0),  // Down Arrow
+            "37": new IndexObj(0, -1), // Left Arrow
+            "39": new IndexObj(0, 1),  // Right Arrow
+            "87": new IndexObj(-1, 0), // W Key (Up)
+            "83": new IndexObj(1, 0),  // S Key (Down)
+            "65": new IndexObj(0, -1), // A Key (Left)
+            "68": new IndexObj(0, 1),  // D Key (Right)
+            "73": new IndexObj(-1, 0), // I key (Up)
+            "75": new IndexObj(1, 0),  // K Key (Down)
+            "74": new IndexObj(0, -1), // J key (Left)
+            "76": new IndexObj(0, 1),  // L key (Right)
+        },
+        "portalKeys": {
+            "81": this.Portal1,  // Q Key
+            "69": this.Portal2,  // E Key
+            "85": this.Portal1,  // U Key
+            "79": this.Portal2,  // O Key
+            "17": this.Portal1,  // Ctrl Key
+            "16": this.Portal2,  // Shift Key
+        },
+        "handle": function(keyEvent) {
+            let Movement = this.keyInput.movementKeys[keyEvent.keyCode];
+            if (Movement) {
+                let moveTo = this.Environment.player.add(Movement);
+                let cellTo = this.Environment.cell[moveTo.toString()];
+                let cellAction = this.Tile[cellTo].action;
+                if (cellAction) {
+                    cellAction.call(this, moveTo, cellTo, Movement);
+                }
+            }
+            else {
+                let Portal = this.keyInput.portalKeys[keyEvent.keyCode];
+                if (Portal) {
+                    this.shootPortal(Portal);
+                }
+            }
+        },
+    };
+    this.convert = {
+        "toDirection": {"-1,0": "^", "1,0": "v", "0,-1": "<", "0,1": ">"},
+        "reverseFacing": {"^": "v", "v": "^", "<": ">", ">": "<"},
+        "toMovement": {
+            "^": new IndexObj(-1,0),
+            "v": new IndexObj(1,0),
+            "<": new IndexObj(0,-1),
+            ">": new IndexObj(0,1)
+        },
     };
     this.parseLevelFile = function*(levelFile) {
         let fileLines = levelFile.target.result.split("\n");
@@ -24,10 +74,7 @@ function TilePortal() {
                 // Previous references are gone.
                 Structure = [];
             }
-            else if (Begin === "\\" || !Begin) {
-                continue;
-            }
-            else {
+            else if (Begin !== "\\" && Begin) {
                 Structure.push(Line);
             }
         }
@@ -80,61 +127,49 @@ function TilePortal() {
         this.replaceImage(moveTo, cellTo);
     };
     */ 
+    this.movePlayer = function(moveTo, _, Movement) {
+        let Facing = this.convert.toDirection[Movement.toString()];
+        this.placePlayer(moveTo, Facing)
+        this.playerFacing = Facing;
+    };
     this.changeFacing = function(_, _, Movement) {
-        let toDirection  = {"-1,0": "^", "1,0": "v", "0,-1": "<", "0,1": ">"};
-        this.replaceImage(this.Environment.player, toDirection[Movement]);
-        this.Environment.facing = toDirection[Movement];
+        this.movePlayer(this.Environment.player, _, Movement);
+    };
+    this.removePortal = function(Portal) {
+        if (Portal.index) {
+            this.replaceCell(Portal.index, "#");
+        }
+    };
+    this.placePortal = function(Portal, newPortalIndex, Facing) {
+        Portal.index = newPortalIndex;
+        Portal.facing = Facing;
+        this.replaceCell(newPortalIndex, Portal.type);
     };
     this.shootPortal = function(Portal) {
-        let toMovement = {"^": [-1,0], "v": [1,0], "<": [0,-1], ">": [0,1]};
-        let Movement = toMovement[this.Environment.facing];
-        let toReverse = {"^": "v", "v": "^", "<": ">", ">": "<"};
-        let targetIndex = [
-            this.Environment.player[0] + Movement[0],
-            this.Environment.player[1] + Movement[1]
-        ];
-        while (this.Environment.cell.hasOwnProperty(targetIndex)) {
-            if (this.Environment.cell[targetIndex] === "#" ||
-                this.Environment.cell[targetIndex] === Portal.type)
-            {
-                let portalFacing = toReverse[this.Environment.facing];
+        let Movement = this.convert.toMovement[this.playerFacing];
+        let portalFacing = this.convert.reverseFacing[this.playerFacing];
+        let targetIndex = this.Environment.player.add(Movement);
+        let targetCell = this.Environment.cell[targetIndex.toString()];
+        while (targetCell) {
+            if (targetCell === "#" || targetCell === Portal.type) {
                 this.removePortal(Portal);
                 this.placePortal(Portal, targetIndex, portalFacing);
                 break;
             }
-            // Breakoff search if the other portal.
-            else if (this.Environment.cell[targetIndex] === "o" ||
-                     this.Environment.cell[targetIndex] === "O")
+            // Breakoff search if target cell is the remaining portal.
+            else if (targetCell === "o" || targetCell === "O")
             {
                 break;
             }
-            targetIndex = [
-                targetIndex[0] + Movement[0],
-                targetIndex[1] + Movement[1]
-            ];
-        }
-    }
-    this.placePortal = function(Portal, portalIndex, Facing) {
-        Portal.index = portalIndex;
-        Portal.value = this.Environment.cell[portalIndex];
-        Portal.facing = Facing;
-        this.replaceCell(portalIndex, Portal.type);
-    };
-    this.removePortal = function(Portal) {
-        if (Portal.index) {
-            this.replaceCell(Portal.index, Portal.value);
+            targetIndex = targetIndex.add(Movement);
+            targetCell = this.Environment.cell[targetIndex.toString()];
         }
     };
-    this.portalTransit = function(moveTo, cellTo) {
-        let Environment = this.Environment;
-        let Portal = cellTo === "o" ? this.Portal2 : this.Portal1;
-        let toMovement = {"^": [-1,0], "v": [1,0], "<": [0,-1], ">": [0,1]};
-        let Movement = toMovement[Portal.facing];
-        let Exit = [
-            Portal.index[0] + Movement[0],
-            Portal.index[1] + Movement[1]
-        ];
-        if (Environment.cell[Exit] === " ") {
+    this.portalTransit = function(moveTo, cellTo, _) {
+        let portalTo = cellTo === "o" ? this.Portal2 : this.Portal1;
+        let Movement = this.convert.toMovement[portalTo.facing];
+        let Exit = portalTo.index.add(Movement);
+        if (this.Environment.cell[Exit.toString()] === " ") {
             this.movePlayer(Exit, cellTo, Movement);
         }
     };
@@ -153,47 +188,6 @@ function TilePortal() {
             "O": {"image": getImg("Portal2"), "action": this.portalTransit},
         };
         return Tile;
-    };
-    this.keyInput = {
-        "movementKeys": {
-            "38": [-1, 0], // Up Arrow
-            "40": [1, 0],  // Down Arrow
-            "37": [0, -1], // Left Arrow
-            "39": [0, 1],  // Right Arrow
-            "87": [-1, 0], // W Key (Up)
-            "83": [1, 0],  // S Key (Down)
-            "65": [0, -1], // A Key (Left)
-            "68": [0, 1],  // D Key (Right)
-            "73": [-1, 0], // I key (Up)
-            "75": [1, 0],  // K Key (Down)
-            "74": [0, -1], // J key (Left)
-            "76": [0, 1],  // L key (Right)
-        },
-        "portalKeys": {
-            "81": this.Portal1,  // Q Key
-            "69": this.Portal2,  // E Key
-            "85": this.Portal1,  // U Key
-            "79": this.Portal2,  // O Key
-            "17": this.Portal1,  // Ctrl Key
-            "16": this.Portal2,  // Shift Key
-        },
-        "handle": function(keyEvent) {
-            let Movement = this.keyInput.movementKeys[keyEvent.keyCode];
-            let Portal = this.keyInput.portalKeys[keyEvent.keyCode];
-            if (Movement) {
-                let moveTo = [
-                    this.Environment.player[0] + Movement[0],
-                    this.Environment.player[1] + Movement[1]];
-                let cellTo = this.Environment.cell[moveTo];
-                let cellAction = this.Tile[cellTo].action;
-                if (moveTo in this.Environment.cell && cellAction) {
-                    cellAction.call(this, moveTo, cellTo, Movement);
-                }
-            }
-            else if (Portal) {
-                this.shootPortal(Portal);
-            }
-        },
     };
     this.Tile = this.__constructTiles();
 }
