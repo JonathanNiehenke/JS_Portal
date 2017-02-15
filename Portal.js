@@ -3,13 +3,14 @@ let db = console.log;
 function TilePortal() {
     this.__proto__ = new Engine(undefined, "v");
     this.playerFacing = "v";
+    this.object = " ";
     this.Portal1 = {
-        "type": "o",
+        "type": "*",
         "index": undefined,
         "facing": undefined,
     };
     this.Portal2 = {
-        "type": "O",
+        "type": "+",
         "index": undefined,
         "facing": undefined,
     };
@@ -38,6 +39,7 @@ function TilePortal() {
         },
         "handle": function(keyEvent) {
             let Movement = this.keyInput.movementKeys[keyEvent.keyCode];
+            let Portal = this.keyInput.portalKeys[keyEvent.keyCode];
             if (Movement) {
                 let moveTo = this.Environment.player.add(Movement);
                 let cellTo = this.Environment.cell[moveTo.toString()];
@@ -46,11 +48,11 @@ function TilePortal() {
                     cellAction.call(this, moveTo, cellTo, Movement);
                 }
             }
-            else {
-                let Portal = this.keyInput.portalKeys[keyEvent.keyCode];
-                if (Portal) {
-                    this.shootPortal(Portal);
-                }
+            else if (Portal) {
+                this.shootPortal(Portal);
+            }
+            else if (keyEvent.keyCode == 32){
+                this.dropObject();
             }
         },
     };
@@ -74,7 +76,7 @@ function TilePortal() {
                 // Previous references are gone.
                 Structure = [];
             }
-            else if (Begin !== "\\" && Begin) {
+            else if (Begin !== "/" && Begin) {
                 Structure.push(Line);
             }
         }
@@ -93,40 +95,6 @@ function TilePortal() {
             document.getElementById("levels").className = "Hidden";
         }
     };
-    // Reimpliment for blocks and spheres.
-    /*
-    this.__replaceObject = function(cellValue) {
-        this.Inventory.object = cellValue;
-        let newImgEl = this.Tile[cellValue].image.cloneNode();
-        let currentImgEl = document.getElementById("Object");
-        currentImgEl.parentNode.replaceChild(newImgEl, currentImgEl);
-        newImgEl.id = "Object";  // Reset the id for later use.
-        if (cellValue === "@") {
-            this.changeRequirements(-1);
-            this.replaceAllCells(":", ":");
-        }
-        else {
-            this.changeRequirements(1);
-            this.replaceAllCells(":", ";");
-        }
-    };
-    this.pickupObject = function(moveTo, cellTo) {
-        if (this.Inventory.object === "@") {
-            this.openCell(moveTo);
-            this.__replaceObject(cellTo);
-        }
-    };
-    this.dropObject = function(moveTo, cellTo) {
-        let object = cellTo.toLowerCase();
-        if (object === this.Inventory.object) {
-            this.__replaceObject("@");
-        }
-    };
-    this.__replaceMap = function(moveTo, cellTo) {
-        this.Inventory.map[moveTo] = cellTo;
-        this.replaceImage(moveTo, cellTo);
-    };
-    */ 
     this.movePlayer = function(moveTo, _, Movement) {
         let Facing = this.convert.toDirection[Movement.toString()];
         this.placePlayer(moveTo, Facing)
@@ -157,7 +125,8 @@ function TilePortal() {
                 break;
             }
             // Breakoff search if target cell is the remaining portal.
-            else if (targetCell === "o" || targetCell === "O")
+            else if (targetCell === "*" || targetCell === "+" ||
+                     targetCell === "X")
             {
                 break;
             }
@@ -165,17 +134,48 @@ function TilePortal() {
             targetCell = this.Environment.cell[targetIndex.toString()];
         }
     };
-    this.portalTransit = function(moveTo, cellTo, _) {
-        let portalTo = cellTo === "o" ? this.Portal2 : this.Portal1;
-        let Movement = this.convert.toMovement[portalTo.facing];
-        let Exit = portalTo.index.add(Movement);
-        if (this.Environment.cell[Exit.toString()] === " ") {
-            this.movePlayer(Exit, cellTo, Movement);
+    // Very similar to keyInput.handle
+    this.portalTransit = function(moveTo, cellTo, Movement) {
+        let portalTo = cellTo === "*" ? this.Portal2 : this.Portal1;
+        let portalMovement = this.convert.toMovement[portalTo.facing];
+        let Exit = portalTo.index.add(portalMovement);
+        let exitCell = this.Environment.cell[Exit.toString()];
+        let exitAction = this.Tile[exitCell].action;
+        Movement = (exitCell === "@") ? Movement : portalMovement;
+        if (exitAction) {
+            exitAction.call(this, Exit, exitCell, Movement);
+        }
+    };
+    this.revealWall = function(_, cellTo, _) {
+        this.replaceAllCells(cellTo.toUpperCase(), "#");
+    };
+    this.revealEmpty = function(_, cellTo, _) {
+        this.replaceAllCells(cellTo.toUpperCase(), " ");
+    };
+    this.__replaceObject = function(cellValue) {
+        this.object = cellValue;
+        let newImgEl = this.Tile[cellValue].image.cloneNode();
+        let currentImgEl = document.getElementById("Object");
+        currentImgEl.parentNode.replaceChild(newImgEl, currentImgEl);
+        newImgEl.id = "Object";
+    };
+    this.Pickup = function(moveTo, cellTo, Movement) {
+        if (this.object === " ") {
+            this.__replaceObject(cellTo);
+            this.Environment.cell[moveTo] = " ";
+        }
+        this.movePlayer(moveTo, cellTo, Movement);
+    };
+    this.dropObject = function() {
+        let currentPos = this.Environment.player.toString();
+        if (this.Environment.cell[currentPos] === " ") {
+            this.Environment.cell[currentPos] = this.object;
+            this.__replaceObject(" ");
         }
     };
     this.__constructTiles = function() {
         let getImg = document.getElementById.bind(document);
-        Tile = {
+        let Tile = {
             " ": {"image": getImg("Empty"), "action": this.movePlayer},
             "@": {"image": getImg("Hazard"), "action": this.changeFacing},
             "#": {"image": getImg("Wall"), "action": this.changeFacing},
@@ -184,8 +184,55 @@ function TilePortal() {
             "v": {"image": getImg("Down"), "action": undefined},
             "<": {"image": getImg("Left"), "action": undefined},
             ">": {"image": getImg("Right"), "action": undefined},
-            "o": {"image": getImg("Portal1"), "action": this.portalTransit},
-            "O": {"image": getImg("Portal2"), "action": this.portalTransit},
+            "*": {"image": getImg("Portal1"), "action": this.portalTransit},
+            "+": {"image": getImg("Portal2"), "action": this.portalTransit},
+            "X": {
+                "image": getImg("Exit"),
+                "action": function(){
+                    this.Environment = this.nextEnvironment();
+                    this.playerFacing = "v";
+                    this.Portal1.index = undefined;
+                    this.Portal2.index = undefined;
+                    if (Object.keys(this.Environment.cell).length === 0) {
+                        let structureEl = document.getElementById("Structure");
+                        structureEl.innerHTML = "Complete";
+                    }
+                }
+            },
+            "a": {"image": getImg("PushButton"), "action": this.revealWall},
+            "b": {"image": getImg("PushButton"), "action": this.revealWall},
+            "c": {"image": getImg("PushButton"), "action": this.revealWall},
+            "d": {"image": getImg("PushButton"), "action": this.revealWall},
+            "e": {"image": getImg("PushButton"), "action": this.revealEmpty},
+            "f": {"image": getImg("PushButton"), "action": this.revealEmpty},
+            "g": {"image": getImg("PushButton"), "action": this.revealEmpty},
+            "h": {"image": getImg("PushButton"), "action": this.revealEmpty},
+            "i": {"image": getImg("Button"), "action": this.revealWall},
+            "j": {"image": getImg("Button"), "action": this.revealWall},
+            "k": {"image": getImg("Button"), "action": this.revealWall},
+            "l": {"image": getImg("Button"), "action": this.revealWall},
+            "m": {"image": getImg("Button"), "action": this.revealEmpty},
+            "n": {"image": getImg("Button"), "action": this.revealEmpty},
+            "o": {"image": getImg("Button"), "action": this.revealEmpty},
+            "p": {"image": getImg("Button"), "action": this.revealEmpty},
+            "A": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "B": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "C": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "D": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "E": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "F": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "G": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "H": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "I": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "J": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "K": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "L": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "M": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "N": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "O": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "P": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "Q": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "z": {"image": getImg("Cube"), "action": this.Pickup},
         };
         return Tile;
     };
