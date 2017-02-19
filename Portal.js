@@ -3,7 +3,10 @@ let db = console.log;
 function TilePortal() {
     this.__proto__ = new Engine(undefined, "v");
     this.playerFacing = "v";
-    this.object = " ";
+    this.Inventory = {
+        "object": " ",
+        "map": {},
+    }
     this.Portal1 = {
         "type": "*",
         "index": undefined,
@@ -51,7 +54,7 @@ function TilePortal() {
             else if (Portal) {
                 this.shootPortal(Portal);
             }
-            else if (keyEvent.keyCode == 32){
+            else if (keyEvent.keyCode == 32) {  // A space
                 this.dropObject();
             }
         },
@@ -95,13 +98,19 @@ function TilePortal() {
             document.getElementById("levels").className = "Hidden";
         }
     };
-    this.movePlayer = function(moveTo, _, Movement) {
+    this.movePlayer = function(moveTo, cellTo, Movement) {
+        let onCell = this.Environment.cell[this.Environment.player.toString()];
+        if ("ijklmnop".indexOf(onCell) !== -1) {
+            this.Tile[onCell].action.call(this, moveTo, onCell, Movement, true);
+        }
         let Facing = this.convert.toDirection[Movement.toString()];
         this.placePlayer(moveTo, Facing)
         this.playerFacing = Facing;
     };
-    this.changeFacing = function(_, _, Movement) {
-        this.movePlayer(this.Environment.player, _, Movement);
+    this.changeFacing = function(_, toCell, Movement) {
+        let Facing = this.convert.toDirection[Movement.toString()];
+        this.placePlayer(this.Environment.player, Facing)
+        this.playerFacing = Facing;
     };
     this.removePortal = function(Portal) {
         if (Portal.index) {
@@ -119,7 +128,9 @@ function TilePortal() {
         let targetIndex = this.Environment.player.add(Movement);
         let targetCell = this.Environment.cell[targetIndex.toString()];
         while (targetCell) {
-            if (targetCell === "#" || targetCell === Portal.type) {
+            if (targetCell === Portal.type ||
+                "#EFGHMXOP".indexOf(targetCell) !== -1)
+            {
                 this.removePortal(Portal);
                 this.placePortal(Portal, targetIndex, portalFacing);
                 break;
@@ -146,31 +157,91 @@ function TilePortal() {
             exitAction.call(this, Exit, exitCell, Movement);
         }
     };
-    this.revealWall = function(_, cellTo, _) {
-        this.replaceAllCells(cellTo.toUpperCase(), "#");
+    this.adjustHW = function(_, cellTo, _, hide) {
+        this.replaceAllCells(cellTo.toUpperCase(), hide ? "@" : "#");
     };
-    this.revealEmpty = function(_, cellTo, _) {
-        this.replaceAllCells(cellTo.toUpperCase(), " ");
+    this.adjustHE = function(_, cellTo, _, hide) {
+        this.replaceAllCells(cellTo.toUpperCase(), hide ? "@" : " ");
+    };
+    this.adjustWE = function(_, cellTo, _, hide) {
+        this.replaceAllCells(cellTo.toUpperCase(), hide ? "#" : " ");
+    };
+    this.adjustWH = function(_, cellTo, _, hide) {
+        this.replaceAllCells(cellTo.toUpperCase(), hide ? "#" : "@");
+    };
+    this.pushHW = function(_, cellTo, Movement, hide) {
+        this.adjustHW(_, cellTo, Movement);
+        this.changeFacing(_, cellTo, Movement);
+    };
+    this.pushHE = function(_, cellTo, Movement, hide) {
+        this.adjustHE(_, cellTo, Movement);
+        this.changeFacing(_, cellTo, Movement);
+        this.replaceAllCells(cellTo.toUpperCase(), hide ? "@" : " ");
+    };
+    this.pushWE = function(_, cellTo, Movement, hide) {
+        this.adjustWE(_, cellTo, Movement);
+        this.changeFacing(_, cellTo, Movement);
+    };
+    this.pushWH = function(_, cellTo, Movement, hide) {
+        this.adjustWH(_, cellTo, Movement);
+        this.changeFacing(_, cellTo, Movement);
+    };
+    this.buttonHW = function(moveTo, cellTo, Movement, hide) {
+        if (!hide) {
+            this.movePlayer(moveTo, cellTo, Movement);
+        }
+        this.adjustHW(moveTo, cellTo, Movement, hide);
+    };
+    this.buttonHE = function(moveTo, cellTo, Movement, hide) {
+        if (!hide) {
+            this.movePlayer(moveTo, cellTo, Movement);
+        }
+        this.adjustHE(moveTo, cellTo, Movement, hide);
+    };
+    this.buttonWE = function(moveTo, cellTo, Movement, hide) {
+        if (!hide) {
+            this.movePlayer(moveTo, cellTo, Movement);
+        }
+        this.adjustWE(moveTo, cellTo, Movement, hide);
+    };
+    this.buttonWH = function(moveTo, cellTo, Movement, hide) {
+        if (!hide) {
+            this.movePlayer(moveTo, cellTo, Movement);
+        }
+        this.adjustWH(moveTo, cellTo, Movement, hide);
     };
     this.__replaceObject = function(cellValue) {
-        this.object = cellValue;
+        this.Inventory.object = cellValue;
         let newImgEl = this.Tile[cellValue].image.cloneNode();
         let currentImgEl = document.getElementById("Object");
         currentImgEl.parentNode.replaceChild(newImgEl, currentImgEl);
         newImgEl.id = "Object";
     };
     this.Pickup = function(moveTo, cellTo, Movement) {
-        if (this.object === " ") {
+        if (cellTo === "Z" && this.Inventory.object === " ") {
+            this.__replaceObject("z");
+            let rep = this.Inventory.map[moveTo.toString()];
+            this.Environment.cell[moveTo] = rep;
+        }
+        else if (this.Inventory.object === " ") {
             this.__replaceObject(cellTo);
             this.Environment.cell[moveTo] = " ";
         }
         this.movePlayer(moveTo, cellTo, Movement);
     };
     this.dropObject = function() {
+        if (this.Inventory.object !== "z") return;
         let currentPos = this.Environment.player.toString();
-        if (this.Environment.cell[currentPos] === " ") {
-            this.Environment.cell[currentPos] = this.object;
+        let currentCell = this.Environment.cell[currentPos];
+        db(currentPos, currentCell, this.Inventory.object);
+        if (currentCell === " ") {
+            this.Environment.cell[currentPos] = this.Inventory.object;
             this.__replaceObject(" ");
+        }
+        else if ("ijklmnop".indexOf(currentCell) !== -1) {
+            this.__replaceObject(" ");
+            this.Environment.cell[currentPos] = "Z";
+            this.Inventory.map[currentPos] = currentCell;
         }
     };
     this.__constructTiles = function() {
@@ -199,40 +270,40 @@ function TilePortal() {
                     }
                 }
             },
-            "a": {"image": getImg("PushButton"), "action": this.revealWall},
-            "b": {"image": getImg("PushButton"), "action": this.revealWall},
-            "c": {"image": getImg("PushButton"), "action": this.revealWall},
-            "d": {"image": getImg("PushButton"), "action": this.revealWall},
-            "e": {"image": getImg("PushButton"), "action": this.revealEmpty},
-            "f": {"image": getImg("PushButton"), "action": this.revealEmpty},
-            "g": {"image": getImg("PushButton"), "action": this.revealEmpty},
-            "h": {"image": getImg("PushButton"), "action": this.revealEmpty},
-            "i": {"image": getImg("Button"), "action": this.revealWall},
-            "j": {"image": getImg("Button"), "action": this.revealWall},
-            "k": {"image": getImg("Button"), "action": this.revealWall},
-            "l": {"image": getImg("Button"), "action": this.revealWall},
-            "m": {"image": getImg("Button"), "action": this.revealEmpty},
-            "n": {"image": getImg("Button"), "action": this.revealEmpty},
-            "o": {"image": getImg("Button"), "action": this.revealEmpty},
-            "p": {"image": getImg("Button"), "action": this.revealEmpty},
+            "a": {"image": getImg("PushButton"), "action": this.pushHW},
+            "b": {"image": getImg("PushButton"), "action": this.pushHW},
+            "c": {"image": getImg("PushButton"), "action": this.pushHE},
+            "d": {"image": getImg("PushButton"), "action": this.pushHE},
+            "e": {"image": getImg("PushButton"), "action": this.pushWE},
+            "f": {"image": getImg("PushButton"), "action": this.pushWE},
+            "g": {"image": getImg("PushButton"), "action": this.pushWH},
+            "h": {"image": getImg("PushButton"), "action": this.pushWH},
+            "i": {"image": getImg("Button"), "action": this.buttonHW},
+            "j": {"image": getImg("Button"), "action": this.buttonHW},
+            "k": {"image": getImg("Button"), "action": this.buttonHE},
+            "l": {"image": getImg("Button"), "action": this.buttonHE},
+            "m": {"image": getImg("Button"), "action": this.buttonWE},
+            "n": {"image": getImg("Button"), "action": this.buttonWE},
+            "o": {"image": getImg("Button"), "action": this.buttonWH},
+            "p": {"image": getImg("Button"), "action": this.buttonWH},
             "A": {"image": getImg("Hazard"), "action": this.changeFacing},
             "B": {"image": getImg("Hazard"), "action": this.changeFacing},
             "C": {"image": getImg("Hazard"), "action": this.changeFacing},
             "D": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "E": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "F": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "G": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "H": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "E": {"image": getImg("Wall"), "action": this.changeFacing},
+            "F": {"image": getImg("Wall"), "action": this.changeFacing},
+            "G": {"image": getImg("Wall"), "action": this.changeFacing},
+            "H": {"image": getImg("Wall"), "action": this.changeFacing},
             "I": {"image": getImg("Hazard"), "action": this.changeFacing},
             "J": {"image": getImg("Hazard"), "action": this.changeFacing},
             "K": {"image": getImg("Hazard"), "action": this.changeFacing},
             "L": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "M": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "N": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "O": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "P": {"image": getImg("Hazard"), "action": this.changeFacing},
-            "Q": {"image": getImg("Hazard"), "action": this.changeFacing},
+            "M": {"image": getImg("Wall"), "action": this.changeFacing},
+            "N": {"image": getImg("Wall"), "action": this.changeFacing},
+            "O": {"image": getImg("Wall"), "action": this.changeFacing},
+            "P": {"image": getImg("Wall"), "action": this.changeFacing},
             "z": {"image": getImg("Cube"), "action": this.Pickup},
+            "Z": {"image": getImg("CubeButton"), "action": this.Pickup},
         };
         return Tile;
     };
