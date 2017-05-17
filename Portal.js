@@ -1,5 +1,12 @@
 let db = console.log;
 
+function PortalShell(Portal, Index, Movement) {
+    this.portal = Portal;
+    this.index = Index;
+    this.movement = Movement;
+    this.annimate = undefined;
+}
+
 function TilePortal() {
     this.__proto__ = new Engine(undefined, "v");
     this.playerFacing = "v";
@@ -9,11 +16,15 @@ function TilePortal() {
     }
     this.Portal1 = {
         "type": "*",
+        "shell": "-",
+        "opening": ".",
         "index": undefined,
         "facing": undefined,
     };
     this.Portal2 = {
         "type": "+",
+        "shell": "=",
+        "opening": ",",
         "index": undefined,
         "facing": undefined,
     };
@@ -107,7 +118,7 @@ function TilePortal() {
         this.placePlayer(moveTo, Facing)
         this.playerFacing = Facing;
     };
-    this.changeFacing = function(_, toCell, Movement) {
+    this.changeFacing = function(_, _, Movement) {
         let Facing = this.convert.toDirection[Movement.toString()];
         this.placePlayer(this.Environment.player, Facing)
         this.playerFacing = Facing;
@@ -120,30 +131,40 @@ function TilePortal() {
     this.placePortal = function(Portal, newPortalIndex, Facing) {
         Portal.index = newPortalIndex;
         Portal.facing = Facing;
-        this.replaceCell(newPortalIndex, Portal.type);
+        this.replaceImage(newPortalIndex, Portal.opening);
+        setTimeout(this.replaceCell.bind(this), 150, newPortalIndex, Portal.type);
+    };
+    this.moveShell = function(portalShell) {
+        let Index = portalShell.index;
+        let toIndex = Index.add(portalShell.movement);
+        let toCell = this.Environment.cell[toIndex.toString()] ;
+        if (toCell === portalShell.portal.type ||
+            "#EFGHMOP".indexOf(toCell) !== -1)
+        {
+            this.replaceImage(Index, this.Environment.cell[Index.toString()]);
+            let Portal = portalShell.portal;
+            this.removePortal(Portal);
+            let portalFacing = this.convert.reverseFacing[this.playerFacing];
+            this.placePortal(Portal, toIndex, portalFacing);
+        }
+        else if (!toCell || toCell === "*" || toCell === "+" || toCell === "X")
+        {
+            this.replaceImage(Index, this.Environment.cell[Index.toString()]);
+        }
+        else {
+            let Index = portalShell.index;
+            this.replaceImage(Index, this.Environment.cell[Index.toString()]);
+            this.replaceImage(toIndex, portalShell.portal.shell);
+            portalShell.index = toIndex;
+            portalShell.annimate = setTimeout(
+                this.moveShell.bind(this), 28, portalShell);
+        }
     };
     this.shootPortal = function(Portal) {
         let Movement = this.convert.toMovement[this.playerFacing];
-        let portalFacing = this.convert.reverseFacing[this.playerFacing];
-        let targetIndex = this.Environment.player.add(Movement);
-        let targetCell = this.Environment.cell[targetIndex.toString()];
-        while (targetCell) {
-            if (targetCell === Portal.type ||
-                "#EFGHMXOP".indexOf(targetCell) !== -1)
-            {
-                this.removePortal(Portal);
-                this.placePortal(Portal, targetIndex, portalFacing);
-                break;
-            }
-            // Breakoff search if target cell is the remaining portal.
-            else if (targetCell === "*" || targetCell === "+" ||
-                     targetCell === "X")
-            {
-                break;
-            }
-            targetIndex = targetIndex.add(Movement);
-            targetCell = this.Environment.cell[targetIndex.toString()];
-        }
+        let portalShell = new PortalShell(Portal, this.Environment.player, Movement);
+        this.moveShell(portalShell);
+        this.changeFacing(undefined, undefined, Movement);
     };
     // Very similar to keyInput.handle
     this.portalTransit = function(moveTo, cellTo, Movement) {
@@ -255,7 +276,11 @@ function TilePortal() {
             "v": {"image": getImg("Down"), "action": undefined},
             "<": {"image": getImg("Left"), "action": undefined},
             ">": {"image": getImg("Right"), "action": undefined},
+            "-": {"image": getImg("Portal1Shell"), "action": undefined},
+            ".": {"image": getImg("Portal1Opening"), "action": undefined},
             "*": {"image": getImg("Portal1"), "action": this.portalTransit},
+            "=": {"image": getImg("Portal2Shell"), "action": undefined},
+            ",": {"image": getImg("Portal2Opening"), "action": undefined},
             "+": {"image": getImg("Portal2"), "action": this.portalTransit},
             "X": {
                 "image": getImg("Exit"),
