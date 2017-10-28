@@ -16,10 +16,9 @@ Jonathan Niehenke and CBC Tech Club Programming Group.
 - LICENSE.md - The License.
 - Readme.md - This file.
 
-**Note:** If you are cloning the repository, you will need to use ```git clone --recursive``` to clone the Tile Engine submodule simultaneously. If you aren't using git, you can also manually add the submodule from https://github.com/JonathanNiehenke/JS_TileEngine/ in place of the JS_TileEngine directory.
-
 ### Requires: ###
 - A JavaScript enabled web browser.
+- JS_TileEngine
 
 ### How To: ###
 1. Open the Portal.html in a compatible web browser.
